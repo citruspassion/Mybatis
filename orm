@@ -1,0 +1,48 @@
+orm就是object relation mapping即对象映射关系，就是Java对象和数据库的关系模型建立的一种对应关系
+比如用一个Java的Student类，去对应数据库中的一张student表，类中的属性和表中的列一一对应。Student类就对应student表，一个Student对象就对应student表中的一行数据
+
+为什么是半自动的orm框架
+用mybatis进行开发，需要手动编写SQL语句。而全自动的ORM框架，如hibernate，则不需要编写SQL语句。用hibernate开发，只需要定义好ORM映射关系，就可以直接进行CRUD操作了
+因为手动，所以就比全自动的灵活性高，可以根据需要，自由地对SQL进行定制。但是比如我们要换数据库，而我们本来用的mysql，要换Oracle，那么就要重写了
+虽然mybatis需要手写SQL，但相比JDBC，它提供了输入映射和输出映射，可以很方便地进行SQL参数设置，以及结果集封装。并且还提供了关联查询和动态SQL等功能，极大地提升了开发的效率
+
+
+
+JDBC编程有哪些不足之处，MyBatis是如何解决这些问题的？
+1。频繁创建链接，释放会导致资源的浪费。那么就想到了连接池解决
+===========================================================
+在mybatis-config.xml中配置数据链接池，使用连接池管理数据库连接
+2.sql变动，java代码也会可能变换
+===========================================================
+将Sql语句配置在XXXXmapper.xml文件中与java代码分离
+3.sql where传参困难，比如我们到底需不需要where，我们需要一个stringbuffer来存放我们需要补充的语句
+那么根据实际需求选择append就行。另外还需要一个list存放我们补充语句的参数。（目的防止注入等）。然后就通过tostring和toarray重新转换为string 和object []params
+然后就可以使用jdbc操作了。这样十分麻烦
+===========================================================
+Mybatis自动将java对象映射至sql语句
+4、对结果集解析麻烦，sql变化导致解析代码变化
+===========================================================
+Mybatis自动将sql执行结果映射至java对象
+
+
+
+
+
+
+
+模糊查询like语句该怎么写
+（1）’%${question}%’ 可能引起SQL注入，不推荐
+
+（2）"%"#{question}"%" 注意：因为#{…}解析成sql语句时候，会在变量外侧自动加单引号’ '，所以这里 % 需要使用双引号" "，不能使用单引号 ’ '，不然会查不到任何结果。
+
+（3）CONCAT(’%’,#{question},’%’) 使用CONCAT()函数，推荐
+
+（4）使用bind标签
+
+<select id="listUserLikeUsername" resultType="com.jourwon.pojo.User">
+　　<bind name="pattern" value="'%' + username + '%'" />
+　　select id,sex,age,username,password from person where username LIKE #{pattern}
+</select>
+————————————————
+版权声明：本文为CSDN博主「ThinkWon」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
+原文链接：https://blog.csdn.net/ThinkWon/article/details/101292950
