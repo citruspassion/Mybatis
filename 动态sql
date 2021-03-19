@@ -65,3 +65,21 @@ update user
 where id=1232345
 </update>
 我们的set是有去逗号的功能的，所以放心用
+
+最后由于我们不断地写if 太麻烦了还有一个偷懒的方式就是sql片段
+<sql id="if-name-age">
+<if test="name!=null">  
+and name=#{name}
+</if>
+<if test="age!=null">  
+and age=#{age}
+</if>
+</sql>
+
+所以我们可以
+<select id="getUser" paramType="map" resultType="User">
+select * from user
+<where>
+  <include refid="if-name-age"></include>
+</where>
+</select>
