@@ -83,3 +83,18 @@ select * from user
   <include refid="if-name-age"></include>
 </where>
 </select>
+
+
+同时我们还存在这种情况
+select * from user where id in(2,3,4)
+如果不使用limit的话我们可以用foreach标签
+
+<select>
+select * from user where in
+<foreach item="item" index="index" collection="list"   open="("  separator=","  close=")">
+#{item}
+
+</foreach>
+</select>
+这个list说明我们需要给他传进去一个list，可以用arrayList，里面放参数，
+然后我们传参就行
