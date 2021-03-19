@@ -1,0 +1,67 @@
+通常我们在javaweb都是用arraylist和sb完成的，通过判断接入的参数，来用sb arraylist 追加，最后转tostring,和toArray之类的方法来转换成sql和params[]
+那么在mybatis可以简略这个过程 比如
+List<User>getUser(Map map);
+==============================
+user 表   id ,name ,age
+==============================
+
+<select id="getUser" paramType="map" resultType="User">
+select * from user where 1=1
+<if test="name!=null">  
+and name=#{name}
+</if>
+</select>
+
+===================================================
+<select id="getUser" paramType="map" resultType="User">
+select * from user
+<where>
+<if test="name!=null">  
+and name=#{name}
+</if>
+<if test="age!=null">  
+and age=#{age}
+</if>
+</where>
+</select>
+wher不仅可以帮我们省掉1=1，还可以在and有很多种情况时，加入我们少传了一个if的参数，此时就会报错，
+比如变成 select * from user where name="sdad" and  age=?
+那么where就可以帮我们把少穿的参数对应的if去掉
+实际操作上我们new 一个map只要不给map传参就可以查到全部，如果我们给map  map.getOrDefault("name","sdad")就可以按名字查 
+
+
+
+
+而在动态sql中，我们是存在和switch一样的语法的
+就是  choose when otherwise 标签
+<select id="getUser" paramType="map" resultType="User">
+select * from user 
+<where>
+<choose>
+<when  test="name!=null">
+  name=#{name}     <!--and 是可以不用加的，为什么，你见过switch 取两次的嘛-->
+</when>
+ <otherwise>
+
+  age=#{age}    <!--这里相当于default-->
+ </otherwise>
+</choose>
+</where>
+</select>
+
+
+
+通常我们写update,是有逗号的  update  user set name="" ,  age=""
+<update id="updateUser">
+update user
+<set>
+<if test="name!=null">  
+ name=#{name},
+</if>
+<if test="age!=null">  
+ age=#{age},
+</if>
+</set>
+where id=1232345
+</update>
+我们的set是有去逗号的功能的，所以放心用
