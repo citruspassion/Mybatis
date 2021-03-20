@@ -12,11 +12,138 @@
 以后获取相同地数据，去缓存拿就行
 
 同一个 SqlSession 对象， 在参数和 SQL 完全一样的情况先， 只执行一次 SQL 语句（如果缓存没有过期）
-我们在工作原理提到，SQL session里面
+我们在工作原理提到，MyBatis 底层定义了一个 Executor 接口来操作数据库，它将根据 SqlSession 传递的参数动态地生成需要执行的 SQL 语句，同时负责查询缓存的维护
+每个Executor中有一个LocalCache。当用户发起查询时，MyBatis根据当前执行的语句生成MappedStatement，在Local Cache进行查询，如果缓存命中的话，直接返回结果给用户，
+如果缓存没有命中的话，查询数据库，结果写入LocalCache，最后返回结果给用户
 
+引用：
+1、一级缓存的生命周期有多长？
+　　a、MyBatis在开启一个数据库会话时，会 创建一个新的SqlSession对象，SqlSession对象中会有一个新的Executor对象。
+  Executor对象中持有一个新的PerpetualCache对象；当会话结束时，SqlSession对象及其内部的Executor对象还有PerpetualCache对象也一并释放掉。
+
+　　b、如果SqlSession调用了close()方法，会释放掉一级缓存PerpetualCache对象，一级缓存将不可用。
+
+　　c、如果SqlSession调用了clearCache()，会清空PerpetualCache对象中的数据，但是该对象仍可使用。
+
+　　d、SqlSession中执行了任何一个update操作(update()、delete()、insert()) ，都会清空PerpetualCache对象的数据，但是该对象可以继续使用
+————————————————
+ 2、怎么判断某两次查询是完全相同的查询？
+　　mybatis认为，对于两次查询，如果以下条件都完全一样，那么就认为它们是完全相同的两次查询。
+
+　　2.1 传入的statementId
+
+　　2.2 查询时要求的结果集中的结果范围
+
+　　2.3. 这次查询所产生的最终要传递给JDBC java.sql.Preparedstatement的Sql语句字符串（boundSql.getSql() ）
+
+　　2.4 传递给java.sql.Statement要设置的参数值
+————————————————
+版权声明：本文为CSDN博主「双斜杠少年」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
+原文链接：https://blog.csdn.net/u012373815/article/details/47069223
+
+
+我们来看看如何使用MyBatis一级缓存。开发者只需在MyBatis的配置文件中，添加如下语句，就可以使用一级缓存。共有两个选项，SESSION或者STATEMENT，
+默认是SESSION级别，即在一个MyBatis会话中执行的所有语句，都会共享这一个缓存。一种是STATEMENT级别，可以理解为缓存只对当前执行的这一个Statement有效
+<setting name="localCacheScope" value="SESSION"/> 就可以使用缓存
 
 
 ==================================================================================================================================================
 二级缓存是手动开启的缓存
 为了扩展性，定义了缓存接口cache，可以通过cache自定义二级缓存
+MyBatis的二级缓存是Application级别的缓存
+二级缓存是mapper级别的缓存，多个SqlSession去操作同一个Mapper的sql语句，
+多个SqlSession去操作数据库得到数据会存在二级缓存区域，多个SqlSession可以共用二级缓存，二级缓存是跨SqlSession的。
+sqlSessionFactory层面上的二级缓存默认是不开启的，二级缓存的开启需要进行配置，实现二级缓存的时候，MyBatis要求返回的POJO必须是可序列化的。 
+也就是要求实现Serializable接口，配置方法很简单，只需要在映射XML文件配置就可以开启缓存了<cache/>
 
+工作机制：
+1.一个会话查询一个数据，该数据就会被收录到一级缓存中
+2.当会话结束地时候，会话的一级缓存就没了，但是我们预期的结果是，会话结束的时候，将数据收录到二级缓存
+3.新的查询就会从二级缓存中查询
+4.不同的mapper查处的数据对会放在自己的map中
+
+
+生命周期：二级缓存存在于 SqlSessionFactory 生命周期中。
+
+
+
+<settings>
+  <!--全局地开启或关闭配置文件中的所有映射器已经配置的任何缓存。 -->
+  <setting name="cacheEnabled" value="true"/>
+</settings>
+在要用的xml
+加入<cache/>这个标签
+type：cache使用的类型，默认是PerpetualCache，这在一级缓存中提到过。
+eviction： 定义回收的策略，常见的有FIFO，LRU。
+flushInterval： 配置一定时间自动刷新缓存，单位是毫秒。
+size： 最多缓存对象的个数。
+readOnly： 是否只读，若配置可读写，则需要对应的实体类能够序列化。
+blocking： 若缓存中找不到对应的key，是否会一直blocking，直到有对应的数据进入缓存。
+
+<cahce
+eviction:"FIFO"     创建了一个 first in first out先进先出 fifo高级缓存，每60秒刷新，最多缓存512个，并且返回的对象是只读
+flushInterval:"60000"
+size:"512"
+readOnly:"true"
+/>
+
+@Test
+public void secendLevelCacheTest() {
+
+    // 获取 SqlSession　对象
+    SqlSession sqlSession = sqlSessionFactory.openSession();
+    //  获取 Mapper 对象
+    StudentMapper studentMapper = sqlSession.getMapper(StudentMapper.class);
+    // 使用 Mapper 接口的对应方法，查询 id=2 的对象
+    Student student = studentMapper.selectByPrimaryKey(2);
+    // 更新对象的名称
+    student.setName("奶茶");
+    // 再次使用相同的 SqlSession 查询id=2 的对象
+    Student student1 = studentMapper.selectByPrimaryKey(2);
+    Assert.assertEquals("奶茶", student1.getName());
+    // 同一个 SqlSession ， 此时是一级缓存在作用， 两个对象相同
+    Assert.assertEquals(student, student1);
+
+    sqlSession.close();
+
+    SqlSession sqlSession1 = sqlSessionFactory.openSession();
+    StudentMapper studentMapper1 = sqlSession1.getMapper(StudentMapper.class);
+    Student student2 = studentMapper1.selectByPrimaryKey(2);
+    Student student3 = studentMapper1.selectByPrimaryKey(2);
+    // 由于我们配置的 readOnly="true"， 因此后续同一个 SqlSession 的对象都不一样
+    Assert.assertEquals("奶茶", student2.getName());
+    Assert.assertNotEquals(student3, student2);
+
+    sqlSession1.close();
+}
+
+第一阶段：
+
+在第一个 SqlSession 中， 查询出 student 对象， 此时发送了 SQL 语句;
+student更改了name 属性;
+SqlSession 再次查询出 student1 对象， 此时不发送 SQL 语句， 日志中打印了 「Cache Hit Ratio」, 代表二级缓存使用了， 但是没有命中。 因为一级缓存先作用了。
+由于是一级缓存， 因此， 此时两个对象是相同的。
+调用了 sqlSession.close(), 此时将数据序列化并保持到二级缓存中。
+第二阶段：
+
+新创建一个 sqlSession.close() 对象；
+查询出 student2 对象，直接从二级缓存中拿了数据， 因此没有发送 SQL 语句， 此时查了 3 个对象，但只有一个命中， 因此 命中率 1/3=0.333333；
+查询出 student3 对象，直接从二级缓存中拿了数据， 因此没有发送 SQL 语句， 此时查了 4 个对象，但只有一个命中， 因此 命中率 2/4=0.5；
+由于 readOnly=“true”， 因此 student2 和 student3 都是反序列化得到的， 为不同的实例。
+
+————————————————
+版权声明：本文为CSDN博主「阿进的写字台」的原创文章，遵循CC 4.0 BY-SA版权协议，转载请附上原文出处链接及本声明。
+原文链接：https://blog.csdn.net/weixin_37139197/article/details/82908377
+/>
+
+
+缓存命中率与读取缓存次数有关，如果不考虑缓存的清除等因素，读取缓存的次数越多缓存命中率也就越高
+缓存读取的优先级:采用就近原则，由于一级缓存是存在于内存之中，而二级缓存存在于内存或硬盘之中，所以优先从一级缓存进行查找，
+如果没有再进入二级缓存，以此类推；最后如果缓存中没有，再按照程序运行从数据库中读取
+https://tech.meituan.com/2018/01/19/mybatis-cache.html
+
+
+缺点：
+MyBatis的二级缓存不适应用于映射文件中存在多表查询的情况。
+通常我们会为每个单表创建单独的映射文件，由于MyBatis的二级缓存是基于namespace的，
+多表查询语句所在的namspace无法感应到其他namespace中的语句对多表查询中涉及的表进行的修改，引发脏数据问题。
